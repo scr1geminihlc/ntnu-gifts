@@ -3,7 +3,6 @@ import { Package, Plus, Trash2 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc } from 'firebase/firestore';
 
-// 將您剛剛複製的那段代碼直接貼在下面這行的後面
 const firebaseConfig = {
   apiKey: "AIzaSyDMVW5Nq_ztnDcD1WYNLCL930_YeuMBfLw",
   authDomain: "ntnu-gifts.firebaseapp.com",
@@ -15,7 +14,6 @@ const firebaseConfig = {
   measurementId: "G-QQX2SJ9R1D"
 };
 
-// 初始化 Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
@@ -24,7 +22,6 @@ export default function App() {
   const [newGift, setNewGift] = useState({ name: '', quantity: 0 });
 
   useEffect(() => {
-    // 監聽 Firestore 中的 'gifts' 集合
     const unsubscribe = onSnapshot(collection(db, 'gifts'), (snapshot) => {
       setGifts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
@@ -35,7 +32,7 @@ export default function App() {
     if (!newGift.name) return;
     await addDoc(collection(db, 'gifts'), { 
       name: newGift.name, 
-      quantity: parseInt(newGift.quantity) || 0
+      quantity: parseInt(newGift.quantity) || 0 
     });
     setNewGift({ name: '', quantity: 0 });
   };
@@ -45,27 +42,30 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <header className="max-w-2xl mx-auto mb-8">
-        <h1 className="text-3xl font-bold text-red-800 flex items-center gap-2">
-          <Package className="w-8 h-8" /> 秘書室禮品管理系統
+    <div className="min-h-screen bg-gray-100 py-10 px-4">
+      <div className="max-w-md mx-auto bg-white rounded-2xl shadow-xl overflow-hidden p-6">
+        <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+          <Package className="text-red-600" /> 秘書室禮品管理
         </h1>
-      </header>
-      <main className="max-w-2xl mx-auto bg-white rounded-xl shadow-md p-6 space-y-6">
-        <div className="flex gap-2">
-          <input className="border p-2 rounded flex-1" placeholder="禮品名稱" value={newGift.name} onChange={e => setNewGift({...newGift, name: e.target.value})} />
-          <input className="border p-2 rounded w-20" type="number" value={newGift.quantity} onChange={e => setNewGift({...newGift, quantity: e.target.value})} />
-          <button onClick={addGift} className="bg-red-700 text-white p-2 rounded">新增</button>
+        
+        <div className="flex gap-2 mb-6">
+          <input className="flex-1 border rounded-lg p-2 focus:ring-2 focus:ring-red-400 outline-none" placeholder="禮品名稱" value={newGift.name} onChange={e => setNewGift({...newGift, name: e.target.value})} />
+          <input className="w-16 border rounded-lg p-2 text-center" type="number" value={newGift.quantity} onChange={e => setNewGift({...newGift, quantity: e.target.value})} />
+          <button onClick={addGift} className="bg-red-600 text-white px-4 rounded-lg hover:bg-red-700 transition"><Plus /></button>
         </div>
-        <div className="space-y-2">
+
+        <div className="space-y-3">
           {gifts.map(gift => (
-            <div key={gift.id} className="flex justify-between items-center border-b p-2">
-              <span>{gift.name} (庫存: {gift.quantity})</span>
-              <button onClick={() => deleteGift(gift.id)} className="text-red-500"><Trash2 size={18} /></button>
+            <div key={gift.id} className="flex justify-between items-center bg-gray-50 p-3 rounded-lg border">
+              <span className="font-medium text-gray-700">{gift.name}</span>
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-gray-500">庫存: {gift.quantity}</span>
+                <button onClick={() => deleteGift(gift.id)} className="text-red-400 hover:text-red-600"><Trash2 size={18} /></button>
+              </div>
             </div>
           ))}
         </div>
-      </main>
+      </div>
     </div>
   );
 }

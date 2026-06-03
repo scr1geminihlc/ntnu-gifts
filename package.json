@@ -7,11 +7,10 @@
     "build": "vite build"
   },
   "dependencies": {
-    "comment": "force-rebuild-for-firebase",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "lucide-react": "^0.300.0",
-    "firebase": "^11.6.1"
+    "firebase": "^11.6.1",
+    "lucide-react": "^0.300.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.0",

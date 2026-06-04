@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Eye, Package, History, Plus, X, Search, FileText, UserSearch, Image as ImageIcon, Download, ArrowRightLeft, ClipboardCheck, Info, Hash, Edit2, Upload, Cloud, ZoomIn, Move, FileSpreadsheet } from 'lucide-react';
+import { Shield, Eye, Package, History, Plus, X, Search, FileText, UserSearch, Image as ImageIcon, Download, ArrowRightLeft, ClipboardCheck, Info, Hash, Edit2, Upload, Cloud, ZoomIn, Move, FileSpreadsheet, Trash2 } from 'lucide-react';
 
 // ==========================================
 // Firebase 雲端資料庫設定區
 // ==========================================
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
 
 let app, auth, db, appId;
@@ -72,7 +72,6 @@ export default function App() {
   const [sortBy, setSortBy] = useState('newest');
   const [selectedGift, setSelectedGift] = useState(null);
   
-  // 拖曳排序狀態
   const [draggedId, setDraggedId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
 
@@ -175,9 +174,6 @@ export default function App() {
       return b.id.localeCompare(a.id);
     });
 
-  // ==========================================
-  // 超級魔法功能：自動解析 Excel 歷史資料
-  // ==========================================
   const handleImportExcel = (e) => {
     const file = e.target.files[0];
     if (!file || !user) return;
@@ -192,7 +188,6 @@ export default function App() {
     reader.onload = async (evt) => {
       try {
         const data = evt.target.result;
-        // 呼叫 index.html 中的 SheetJS 來讀取
         const workbook = window.XLSX.read(data, { type: 'binary' });
         
         let giftCounter = gifts.length + 1;
@@ -203,7 +198,6 @@ export default function App() {
           const rawData = window.XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false });
           
           let headerRowIdx = -1;
-          // 找出「日期、入、出、對象」的標題行在哪裡
           for (let i = 0; i < Math.min(10, rawData.length); i++) {
             const rowStr = JSON.stringify(rawData[i]);
             if (rowStr.includes('日期') && (rowStr.includes('入') || rowStr.includes('出') || rowStr.includes('姓名'))) {
@@ -217,7 +211,6 @@ export default function App() {
           const headers = rawData[headerRowIdx];
           const rows = rawData.slice(headerRowIdx + 1);
 
-          // 抓取欄位位置
           const dateCol = headers.findIndex(h => h && String(h).includes('日期'));
           const targetCol = headers.findIndex(h => h && (String(h).includes('對象') || String(h).includes('姓名')));
           const inCol = headers.findIndex(h => h && String(h).includes('入數量'));
@@ -244,13 +237,12 @@ export default function App() {
 
             let dateStr = row[dateCol] ? String(row[dateCol]).trim() : '';
             if (dateStr) {
-               dateStr = dateStr.replace(/\//g, '-').split(' ')[0]; // 清洗時間格式
+               dateStr = dateStr.replace(/\//g, '-').split(' ')[0];
             }
 
             const targetStr = row[targetCol] ? String(row[targetCol]).trim() : '';
             const noteStr = row[noteCol] ? String(row[noteCol]).trim() : '';
 
-            // 只要有日期且(有數量變動或對象或備註)就記錄
             if (dateStr && (change !== 0 || targetStr || noteStr)) {
               history.push({
                 id: Date.now() + idx,
@@ -278,7 +270,7 @@ export default function App() {
               numberedReserves: {},
               image: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&q=80&w=400',
               note: '由 Excel 匯入的資料，請更新實體照片。',
-              history: history.reverse(), // 新的放前面
+              history: history.reverse(),
               order: giftCounter
             };
             giftCounter++;
@@ -297,7 +289,7 @@ export default function App() {
       }
     };
     reader.readAsBinaryString(file);
-    e.target.value = ''; // 重置 input 讓下次還可以點
+    e.target.value = '';
   };
 
   const handleDrop = async (e, targetGift) => {
@@ -367,6 +359,33 @@ export default function App() {
       setPasswordError('');
     } else {
       setPasswordError('密碼錯誤，請重新輸入。');
+    }
+  };
+
+  // ==========================================
+  // 新增：刪除禮品與刪除單筆紀錄功能
+  // ==========================================
+  const handleDeleteGift = async () => {
+    if (!selectedGift || !user || role !== 'admin') return;
+    const isConfirm = window.confirm(`⚠️ 警告：確定要永久刪除「${selectedGift.name}」嗎？\n\n這將會連同裡面所有的進出歷史紀錄一併刪除，且無法復原！`);
+    if (isConfirm) {
+      try {
+        await deleteDoc(doc(db, getGiftsCollectionPath(), selectedGift.id));
+        setIsModalOpen(false);
+        setSelectedGift(null);
+      } catch (error) {
+        console.error("刪除失敗", error);
+        alert('刪除失敗，請稍後再試。');
+      }
+    }
+  };
+
+  const handleDeleteRecord = async (recordId) => {
+    if (!selectedGift || !user || role !== 'admin') return;
+    if (window.confirm('確定要刪除這筆異動紀錄嗎？\n\n注意：這只會刪除紀錄文字，不會自動加回庫存數量。若庫存有誤請用「新增異動」來調整庫存。')) {
+      const updatedHistory = selectedGift.history.filter(r => r.id !== recordId);
+      const updatedGift = { ...selectedGift, history: updatedHistory };
+      await setDoc(doc(db, getGiftsCollectionPath(), selectedGift.id), updatedGift);
     }
   };
 
@@ -844,9 +863,14 @@ export default function App() {
                    <div className="flex items-center gap-3">
                      <h2 className="text-2xl font-bold text-slate-900">{selectedGift.name}</h2>
                      {role === 'admin' && (
-                       <button onClick={openEditGift} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors" title="編輯名稱與備註">
-                         <Edit2 size={18} />
-                       </button>
+                       <div className="flex items-center gap-1">
+                         <button onClick={openEditGift} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors" title="編輯名稱與備註">
+                           <Edit2 size={18} />
+                         </button>
+                         <button onClick={handleDeleteGift} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors" title="刪除此禮品">
+                           <Trash2 size={18} />
+                         </button>
+                       </div>
                      )}
                    </div>
                    <button onClick={closeModal} className="p-2 text-slate-400 hover:text-slate-600 bg-slate-200 rounded-full transition-colors"><X size={20} /></button>
@@ -890,9 +914,14 @@ export default function App() {
                         <div className="flex items-center gap-3">
                           <h2 className="text-2xl font-bold text-slate-900">{selectedGift.name}</h2>
                           {role === 'admin' && (
-                            <button onClick={openEditGift} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors" title="編輯名稱與備註">
-                              <Edit2 size={18} />
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <button onClick={openEditGift} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors" title="編輯名稱與備註">
+                                <Edit2 size={18} />
+                              </button>
+                              <button onClick={handleDeleteGift} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors" title="刪除此禮品">
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
                           )}
                         </div>
                         {selectedGift.isNumbered && <span className="bg-slate-800 text-white text-xs px-2 py-0.5 rounded flex items-center gap-1"><Hash size={12}/> 具獨立編號</span>}
@@ -1148,18 +1177,27 @@ export default function App() {
                                   {record.target}
                                 </span>
                                 
-                                <div className="flex items-center gap-2 flex-shrink-0">
-                                  <span className={`font-black font-mono text-lg ${record.change > 0 ? 'text-emerald-600' : isWithdraw ? 'text-amber-600' : isLog ? 'text-indigo-600' : 'text-rose-600'}`}>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <span className={`font-black font-mono text-lg mr-2 ${record.change > 0 ? 'text-emerald-600' : isWithdraw ? 'text-amber-600' : isLog ? 'text-indigo-600' : 'text-rose-600'}`}>
                                     {record.change > 0 ? '+' : ''}{record.change}
                                   </span>
                                   {role === 'admin' && (
-                                    <button 
-                                      onClick={() => setEditingRecord(record)}
-                                      className="p-1.5 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-100 rounded-md transition-colors"
-                                      title="編輯紀錄文字內容"
-                                    >
-                                      <Edit2 size={16} />
-                                    </button>
+                                    <>
+                                      <button 
+                                        onClick={() => setEditingRecord(record)}
+                                        className="p-1.5 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-100 rounded-md transition-colors"
+                                        title="編輯紀錄文字內容"
+                                      >
+                                        <Edit2 size={16} />
+                                      </button>
+                                      <button 
+                                        onClick={() => handleDeleteRecord(record.id)}
+                                        className="p-1.5 text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-100 rounded-md transition-colors"
+                                        title="刪除此紀錄"
+                                      >
+                                        <Trash2 size={16} />
+                                      </button>
+                                    </>
                                   )}
                                 </div>
                               </div>

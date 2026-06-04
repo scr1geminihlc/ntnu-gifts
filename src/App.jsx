@@ -81,8 +81,9 @@ export default function App() {
   const [isAddGiftModalOpen, setIsAddGiftModalOpen] = useState(false);
   const [newGiftData, setNewGiftData] = useState({ name: '', stock: '', image: '', isTracked: true, isNumbered: false, totalNumbers: '', note: '' });
   
+  // 新增：編輯表單加入 stock 與 availableNumbersStr
   const [isEditGiftModalOpen, setIsEditGiftModalOpen] = useState(false);
-  const [editGiftData, setEditGiftData] = useState({ name: '', note: '' });
+  const [editGiftData, setEditGiftData] = useState({ name: '', note: '', stock: 0, availableNumbersStr: '' });
 
   const [isRecipientSearchModalOpen, setIsRecipientSearchModalOpen] = useState(false);
   const [recipientSearchTerm, setRecipientSearchTerm] = useState('');
@@ -379,9 +380,6 @@ export default function App() {
     }
   };
 
-  // ==========================================
-  // 更新：刪除單筆紀錄時，自動返還數量與編號
-  // ==========================================
   const handleDeleteRecord = async (recordId) => {
     if (!selectedGift || !user || role !== 'admin') return;
     
@@ -409,19 +407,16 @@ export default function App() {
       const sn = recordToDelete.serialNumbers || [];
 
       if (isNormalOut) {
-          // 復原一般出庫：加回庫存、號碼放回可用清單
           newStock += absChange;
           if (selectedGift.isNumbered && sn.length > 0) {
               newAvailableNumbers = [...new Set([...newAvailableNumbers, ...sn])].sort((a,b)=>a-b);
           }
       } else if (isNormalIn) {
-          // 復原一般入庫：扣除庫存、號碼從可用清單移除
           newStock -= absChange;
           if (selectedGift.isNumbered && sn.length > 0) {
               newAvailableNumbers = newAvailableNumbers.filter(n => !sn.includes(n));
           }
       } else if (isWithdraw) {
-          // 復原提領備用：加回主庫存、扣除長官備用庫存、號碼放回可用清單
           newStock += absChange;
           if (newReserves[sender]) {
               newReserves[sender] = Math.max(0, newReserves[sender] - absChange);
@@ -433,7 +428,6 @@ export default function App() {
               }
           }
       } else if (isLog) {
-          // 復原備用發放補登：加回長官備用庫存、號碼放回長官備用清單
           if (!newReserves[sender]) newReserves[sender] = 0;
           newReserves[sender] += absChange;
           if (selectedGift.isNumbered && sn.length > 0) {
@@ -474,19 +468,36 @@ export default function App() {
     setEditingRecord(null);
   };
 
+  // 升級版：打開編輯禮品基本資料，載入號碼清單
   const openEditGift = () => {
-    setEditGiftData({ name: selectedGift.name, note: selectedGift.note || '' });
+    setEditGiftData({ 
+      name: selectedGift.name, 
+      note: selectedGift.note || '',
+      stock: selectedGift.stock || 0,
+      availableNumbersStr: selectedGift.availableNumbers ? selectedGift.availableNumbers.join(', ') : ''
+    });
     setIsEditGiftModalOpen(true);
   };
 
+  // 升級版：儲存包含數量與編號的校正
   const handleEditGiftSubmit = async (e) => {
     e.preventDefault();
     if (!editGiftData.name.trim() || !user) return;
     
+    let newAvailableNumbers = selectedGift.availableNumbers;
+    let finalStock = parseInt(editGiftData.stock, 10) || 0;
+
+    if (selectedGift.isNumbered) {
+      newAvailableNumbers = parseNumbers(editGiftData.availableNumbersStr);
+      finalStock = newAvailableNumbers.length; // 如果是編號禮品，強迫數量等於編號總數
+    }
+    
     const updatedGift = { 
       ...selectedGift, 
       name: editGiftData.name.trim(), 
-      note: editGiftData.note 
+      note: editGiftData.note,
+      stock: finalStock,
+      availableNumbers: newAvailableNumbers
     };
     
     await setDoc(doc(db, getGiftsCollectionPath(), selectedGift.id), updatedGift);
@@ -981,7 +992,7 @@ export default function App() {
                           <h2 className="text-2xl font-bold text-slate-900">{selectedGift.name}</h2>
                           {role === 'admin' && (
                             <div className="flex items-center gap-1">
-                              <button onClick={openEditGift} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors" title="編輯名稱與備註">
+                              <button onClick={openEditGift} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors" title="編輯庫存與基本資料">
                                 <Edit2 size={18} />
                               </button>
                               <button onClick={handleDeleteGift} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors" title="刪除此禮品">
@@ -1304,26 +1315,63 @@ export default function App() {
         </div>
       )}
 
-      {/* 編輯禮品基本資料 Modal */}
+      {/* 編輯禮品基本資料 Modal (終極校正模式) */}
       {isEditGiftModalOpen && role === 'admin' && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
-              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Edit2 size={20} className="text-indigo-600" /> 編輯禮品資料</h3>
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Edit2 size={20} className="text-indigo-600" /> 校正庫存與資料</h3>
               <button onClick={() => setIsEditGiftModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 bg-white rounded-full shadow-sm"><X size={20} /></button>
             </div>
-            <div className="p-6">
+            <div className="p-6 overflow-y-auto max-h-[70vh]">
+              <div className="mb-5 p-3.5 bg-indigo-50 rounded-xl text-sm text-indigo-800 flex items-start gap-2.5 border border-indigo-100 leading-relaxed">
+                <Info size={18} className="mt-0.5 flex-shrink-0 text-indigo-600" />
+                <p>若發現實際盤點與系統紀錄有落差，您可在此處進行**強制校正**。修改後將直接覆蓋系統當前狀態。</p>
+              </div>
               <form onSubmit={handleEditGiftSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">禮品名稱</label>
                   <input type="text" required value={editGiftData.name} onChange={(e) => setEditGiftData({...editGiftData, name: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
                 </div>
+                
+                {selectedGift?.isTracked !== false && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                      {selectedGift?.isNumbered ? '實際在庫總數 (系統將自動依據下方編號數量計算)' : '實際在庫總數 (手動校正)'}
+                    </label>
+                    <input 
+                      type="number" 
+                      required 
+                      disabled={selectedGift?.isNumbered}
+                      value={selectedGift?.isNumbered ? parseNumbers(editGiftData.availableNumbersStr).length : editGiftData.stock} 
+                      onChange={(e) => setEditGiftData({...editGiftData, stock: e.target.value})} 
+                      className={`w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none font-mono ${selectedGift?.isNumbered ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'focus:ring-2 focus:ring-indigo-500'}`} 
+                    />
+                  </div>
+                )}
+
+                {selectedGift?.isNumbered && (
+                  <div className="bg-rose-50 p-4 rounded-xl border border-rose-100">
+                    <label className="block text-sm font-medium text-rose-800 mb-2 flex items-center gap-1">
+                      現有編號清單校正 <Info size={14} className="text-rose-400" title="可使用逗號或連字號，例如: 1, 3, 5-10"/>
+                    </label>
+                    <textarea 
+                      rows="4" 
+                      value={editGiftData.availableNumbersStr} 
+                      onChange={(e) => setEditGiftData({...editGiftData, availableNumbersStr: e.target.value})} 
+                      className="w-full px-3 py-2 border border-rose-200 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none font-mono text-sm leading-relaxed" 
+                    />
+                    <p className="text-xs text-rose-600 mt-2 font-medium">若號碼有遺漏或多出，請直接在此處修改（使用逗號分隔）。儲存後，總數會自動對齊這些號碼的數量。</p>
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">存放位置或說明 (備註)</label>
                   <textarea rows="3" placeholder="例如：存放於秘書室鐵櫃" value={editGiftData.note} onChange={(e) => setEditGiftData({...editGiftData, note: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" />
                 </div>
-                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors mt-2 flex justify-center items-center gap-2">
-                  儲存修改
+
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors mt-2 flex justify-center items-center gap-2 shadow-sm">
+                  確認並儲存校正
                 </button>
               </form>
             </div>
@@ -1438,7 +1486,7 @@ export default function App() {
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Search className="h-5 w-5 text-indigo-400" /></div>
                 <input type="text" autoFocus placeholder="輸入對象姓名、單位或職稱 (如：校長、基金會)..." value={recipientSearchTerm} onChange={(e) => {
                   setRecipientSearchTerm(e.target.value);
-                  setExpandedSearchItems({}); // 搜尋字詞改變時重置展開狀態
+                  setExpandedSearchItems({}); 
                 }} className="block w-full pl-10 pr-3 py-3 border-2 border-indigo-100 rounded-xl leading-5 bg-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-indigo-400 transition-colors text-lg" />
               </div>
             </div>
@@ -1452,7 +1500,6 @@ export default function App() {
                   <div className="text-sm text-slate-500 mb-4">找到 {getRecipientHistory().length} 筆包含「<span className="font-bold text-indigo-600">{recipientSearchTerm}</span>」的送出紀錄：</div>
                   {getRecipientHistory().map((record, idx) => {
                     const isExpanded = expandedSearchItems[idx];
-                    // 判斷是否需要出現「展開」按鈕：字數太長，或包含換行符號
                     const needsExpansion = record.target.length > 30 || record.target.includes('\n') || (record.note && record.note.length > 30) || (record.note && record.note.includes('\n'));
                     
                     return (
@@ -1507,7 +1554,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 修改歷史紀錄 Modal */}
+      {/* 修改歷史紀錄 Modal (純文字) */}
       {editingRecord && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">

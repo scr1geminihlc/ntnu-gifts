@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Eye, Package, History, Plus, X, Search, FileText, UserSearch, Image as ImageIcon, Download, ArrowRightLeft, ClipboardCheck, Info, Hash, Edit2, Upload, Cloud, ZoomIn } from 'lucide-react';
+import { Shield, Eye, Package, History, Plus, X, Search, FileText, UserSearch, Image as ImageIcon, Download, ArrowRightLeft, ClipboardCheck, Info, Hash, Edit2, Upload, Cloud, ZoomIn, ArrowUpDown } from 'lucide-react';
 
 // ==========================================
 // Firebase 雲端資料庫設定區
@@ -112,17 +112,18 @@ export default function App() {
   const [role, setRole] = useState('viewer'); 
   const [gifts, setGifts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // 新增：排序狀態
+  const [sortBy, setSortBy] = useState('newest');
+
   const [selectedGift, setSelectedGift] = useState(null);
   
-  // Firebase 狀態
   const [user, setUser] = useState(null);
   const [isSyncing, setIsSyncing] = useState(true);
 
-  // UI 狀態
   const [isAddGiftModalOpen, setIsAddGiftModalOpen] = useState(false);
   const [newGiftData, setNewGiftData] = useState({ name: '', stock: '', image: '', isTracked: true, isNumbered: false, totalNumbers: '', note: '' });
   
-  // 新增：編輯禮品名稱與備註的狀態
   const [isEditGiftModalOpen, setIsEditGiftModalOpen] = useState(false);
   const [editGiftData, setEditGiftData] = useState({ name: '', note: '' });
 
@@ -133,7 +134,6 @@ export default function App() {
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState('');
   
-  // 表單狀態
   const [formData, setFormData] = useState({
     recordType: 'normal', 
     date: new Date().toISOString().split('T')[0],
@@ -180,7 +180,6 @@ export default function App() {
         }
       } else {
         const loadedGifts = snapshot.docs.map(d => d.data());
-        loadedGifts.sort((a, b) => a.id.localeCompare(b.id));
         setGifts(loadedGifts);
       }
       setIsSyncing(false);
@@ -199,9 +198,25 @@ export default function App() {
     }
   }, [gifts]);
 
-  const filteredGifts = gifts.filter(gift => 
-    gift.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // 新增：綜合過濾與排序邏輯
+  const sortedAndFilteredGifts = gifts
+    .filter(gift => gift.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === 'name') return a.name.localeCompare(b.name, 'zh-TW');
+      if (sortBy === 'stockDesc') {
+        const stockA = a.isTracked === false ? -1 : (a.stock || 0);
+        const stockB = b.isTracked === false ? -1 : (b.stock || 0);
+        return stockB - stockA;
+      }
+      if (sortBy === 'stockAsc') {
+        const stockA = a.isTracked === false ? 999999 : (a.stock || 0);
+        const stockB = b.isTracked === false ? 999999 : (b.stock || 0);
+        return stockA - stockB;
+      }
+      // 預設 newest (最新加入)
+      if (a.id.length !== b.id.length) return b.id.length - a.id.length;
+      return b.id.localeCompare(a.id);
+    });
 
   const openGiftDetails = (gift) => {
     setSelectedGift(gift);
@@ -261,13 +276,11 @@ export default function App() {
     setEditingRecord(null);
   };
 
-  // 打開編輯禮品基本資料的 Modal
   const openEditGift = () => {
     setEditGiftData({ name: selectedGift.name, note: selectedGift.note || '' });
     setIsEditGiftModalOpen(true);
   };
 
-  // 提交禮品基本資料修改
   const handleEditGiftSubmit = async (e) => {
     e.preventDefault();
     if (!editGiftData.name.trim() || !user) return;
@@ -563,6 +576,21 @@ export default function App() {
             </div>
             <input type="text" placeholder="搜尋禮品名稱..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="block w-full pl-10 pr-3 py-2 border border-slate-300 rounded-lg leading-5 bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-rose-500 transition-colors" />
           </div>
+
+          {/* 新增的排序下拉選單 */}
+          <div className="flex items-center gap-2 bg-white border border-slate-300 rounded-lg px-3 py-2 shadow-sm w-full md:w-auto">
+            <ArrowUpDown size={16} className="text-slate-400" />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="bg-transparent text-sm font-medium text-slate-700 focus:outline-none cursor-pointer w-full"
+            >
+              <option value="newest">最新加入</option>
+              <option value="name">名稱排序 (筆畫)</option>
+              <option value="stockDesc">庫存：多到少</option>
+              <option value="stockAsc">庫存：少到多</option>
+            </select>
+          </div>
           
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
             <button onClick={exportAllCSV} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 px-4 py-2 rounded-lg font-medium transition-colors border border-emerald-200">
@@ -586,7 +614,8 @@ export default function App() {
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredGifts.map((gift) => (
+          {/* 使用新的 sortedAndFilteredGifts 來渲染禮品卡片 */}
+          {sortedAndFilteredGifts.map((gift) => (
             <div key={gift.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition-shadow cursor-pointer flex flex-col relative" onClick={() => openGiftDetails(gift)}>
               
               {gift.isNumbered && (
@@ -1173,7 +1202,7 @@ export default function App() {
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start">
                           <div className="font-bold text-slate-800 text-lg truncate pr-2">{record.target}</div>
-                          <div className="text-sm font-mono font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-md whitespace-nowrap">致贈 {record.change} 件</div>
+                          <div className="text-sm font-mono font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-md whitespace-nowrap">致贈 {Math.abs(record.change)} 件</div>
                         </div>
                         {record.serialNumbers && (
                           <div className="text-xs text-slate-500 mt-1 font-mono">

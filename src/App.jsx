@@ -81,7 +81,6 @@ export default function App() {
   const [isAddGiftModalOpen, setIsAddGiftModalOpen] = useState(false);
   const [newGiftData, setNewGiftData] = useState({ name: '', stock: '', image: '', isTracked: true, isNumbered: false, totalNumbers: '', note: '' });
   
-  // 新增：編輯表單加入 stock 與 availableNumbersStr
   const [isEditGiftModalOpen, setIsEditGiftModalOpen] = useState(false);
   const [editGiftData, setEditGiftData] = useState({ name: '', note: '', stock: 0, availableNumbersStr: '' });
 
@@ -468,7 +467,6 @@ export default function App() {
     setEditingRecord(null);
   };
 
-  // 升級版：打開編輯禮品基本資料，載入號碼清單
   const openEditGift = () => {
     setEditGiftData({ 
       name: selectedGift.name, 
@@ -479,7 +477,6 @@ export default function App() {
     setIsEditGiftModalOpen(true);
   };
 
-  // 升級版：儲存包含數量與編號的校正
   const handleEditGiftSubmit = async (e) => {
     e.preventDefault();
     if (!editGiftData.name.trim() || !user) return;
@@ -489,7 +486,7 @@ export default function App() {
 
     if (selectedGift.isNumbered) {
       newAvailableNumbers = parseNumbers(editGiftData.availableNumbersStr);
-      finalStock = newAvailableNumbers.length; // 如果是編號禮品，強迫數量等於編號總數
+      finalStock = newAvailableNumbers.length;
     }
     
     const updatedGift = { 
@@ -734,15 +731,22 @@ export default function App() {
 
   const exportSingleCSV = (gift) => {
     if (gift.isTracked === false) return;
-    let records = gift.history.map(record => ({
-      giftName: gift.name,
-      date: record.date,
-      sender: record.sender || '',
-      target: record.target,
-      change: record.change,
-      serialNumbers: record.serialNumbers,
-      note: record.note || ''
-    }));
+    let records = [...gift.history]
+      .sort((a, b) => {
+        const dA = new Date(a.date).getTime() || 0;
+        const dB = new Date(b.date).getTime() || 0;
+        if (dB === dA) return (b.id || 0) - (a.id || 0);
+        return dB - dA;
+      })
+      .map(record => ({
+        giftName: gift.name,
+        date: record.date,
+        sender: record.sender || '',
+        target: record.target,
+        change: record.change,
+        serialNumbers: record.serialNumbers,
+        note: record.note || ''
+      }));
     downloadCSV(records, `禮品紀錄_${gift.name}_${new Date().toISOString().split('T')[0]}.csv`);
   };
 
@@ -1231,7 +1235,18 @@ export default function App() {
                       {selectedGift.history.length === 0 ? (
                         <div className="text-center text-slate-400 py-10">尚無紀錄</div>
                       ) : (
-                        selectedGift.history.map((record, index) => {
+                        // ==========================================
+                        // 新增：將歷史紀錄強制依時間反序 (最新到舊)
+                        // ==========================================
+                        [...selectedGift.history]
+                        .sort((a, b) => {
+                          const dA = new Date(a.date).getTime() || 0;
+                          const dB = new Date(b.date).getTime() || 0;
+                          // 若日期相同，用 id 排序保持穩定性
+                          if (dB === dA) return (b.id || 0) - (a.id || 0);
+                          return dB - dA;
+                        })
+                        .map((record, index) => {
                           const isLog = record.target.includes('【備用補登】');
                           const isWithdraw = record.target.includes('【提領備用】');
                           

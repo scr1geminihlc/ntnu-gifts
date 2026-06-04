@@ -86,7 +86,6 @@ export default function App() {
 
   const [isRecipientSearchModalOpen, setIsRecipientSearchModalOpen] = useState(false);
   const [recipientSearchTerm, setRecipientSearchTerm] = useState('');
-  // 新增：用來追蹤哪些查詢結果被展開了
   const [expandedSearchItems, setExpandedSearchItems] = useState({});
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -380,11 +379,78 @@ export default function App() {
     }
   };
 
+  // ==========================================
+  // 更新：刪除單筆紀錄時，自動返還數量與編號
+  // ==========================================
   const handleDeleteRecord = async (recordId) => {
     if (!selectedGift || !user || role !== 'admin') return;
-    if (window.confirm('確定要刪除這筆異動紀錄嗎？\n\n注意：這只會刪除紀錄文字，不會自動加回庫存數量。若庫存有誤請用「新增異動」來調整庫存。')) {
+    
+    const recordToDelete = selectedGift.history.find(r => r.id === recordId);
+    if (!recordToDelete) return;
+
+    const confirmMessage = selectedGift.isNumbered 
+      ? '⚠️ 確定要刪除這筆紀錄嗎？\n\n系統將會自動把這筆紀錄的「數量」與「綁定編號」加回庫存與選單中。'
+      : '⚠️ 確定要刪除這筆紀錄嗎？\n\n系統將會自動把這筆紀錄的「數量」加回庫存中。';
+
+    if (window.confirm(confirmMessage)) {
       const updatedHistory = selectedGift.history.filter(r => r.id !== recordId);
-      const updatedGift = { ...selectedGift, history: updatedHistory };
+      
+      let newStock = selectedGift.stock;
+      let newReserves = { ...(selectedGift.reserves || {}) };
+      let newAvailableNumbers = selectedGift.isNumbered ? [...(selectedGift.availableNumbers || [])] : [];
+      let newNumberedReserves = selectedGift.isNumbered ? { ...(selectedGift.numberedReserves || {}) } : {};
+
+      const isWithdraw = recordToDelete.target.includes('【提領備用】');
+      const isLog = recordToDelete.target.includes('【備用補登】');
+      const isNormalOut = recordToDelete.change < 0 && !isWithdraw && !isLog;
+      const isNormalIn = recordToDelete.change > 0 && !isLog; 
+      const sender = recordToDelete.sender;
+      const absChange = Math.abs(recordToDelete.change);
+      const sn = recordToDelete.serialNumbers || [];
+
+      if (isNormalOut) {
+          // 復原一般出庫：加回庫存、號碼放回可用清單
+          newStock += absChange;
+          if (selectedGift.isNumbered && sn.length > 0) {
+              newAvailableNumbers = [...new Set([...newAvailableNumbers, ...sn])].sort((a,b)=>a-b);
+          }
+      } else if (isNormalIn) {
+          // 復原一般入庫：扣除庫存、號碼從可用清單移除
+          newStock -= absChange;
+          if (selectedGift.isNumbered && sn.length > 0) {
+              newAvailableNumbers = newAvailableNumbers.filter(n => !sn.includes(n));
+          }
+      } else if (isWithdraw) {
+          // 復原提領備用：加回主庫存、扣除長官備用庫存、號碼放回可用清單
+          newStock += absChange;
+          if (newReserves[sender]) {
+              newReserves[sender] = Math.max(0, newReserves[sender] - absChange);
+          }
+          if (selectedGift.isNumbered && sn.length > 0) {
+              newAvailableNumbers = [...new Set([...newAvailableNumbers, ...sn])].sort((a,b)=>a-b);
+              if (newNumberedReserves[sender]) {
+                  newNumberedReserves[sender] = newNumberedReserves[sender].filter(n => !sn.includes(n));
+              }
+          }
+      } else if (isLog) {
+          // 復原備用發放補登：加回長官備用庫存、號碼放回長官備用清單
+          if (!newReserves[sender]) newReserves[sender] = 0;
+          newReserves[sender] += absChange;
+          if (selectedGift.isNumbered && sn.length > 0) {
+              if (!newNumberedReserves[sender]) newNumberedReserves[sender] = [];
+              newNumberedReserves[sender] = [...new Set([...newNumberedReserves[sender], ...sn])].sort((a,b)=>a-b);
+          }
+      }
+
+      const updatedGift = { 
+          ...selectedGift, 
+          history: updatedHistory,
+          stock: newStock,
+          reserves: newReserves,
+          availableNumbers: newAvailableNumbers,
+          numberedReserves: newNumberedReserves
+      };
+      
       await setDoc(doc(db, getGiftsCollectionPath(), selectedGift.id), updatedGift);
     }
   };
@@ -1452,7 +1518,7 @@ export default function App() {
             <div className="p-6">
               <div className="mb-5 p-3.5 bg-amber-50 rounded-xl text-sm text-amber-800 flex items-start gap-2.5 border border-amber-100 leading-relaxed">
                 <Info size={18} className="mt-0.5 flex-shrink-0 text-amber-600" />
-                <p>為確保庫存數與限量編號之正確性，此處僅供修改<strong>文字紀錄 (日期、對象、經手人與備註)</strong>。若原登記「數量」有誤，請新增一筆異動紀錄來平衡庫存。</p>
+                <p>為確保庫存與限量編號的連動正確性，此處僅供修改<strong>文字紀錄 (日期、對象、經手人與備註)</strong>。若原登記的「數量」或「編號」有誤，請直接<strong>刪除該筆紀錄</strong>（系統會自動加回庫存與編號），再重新新增一筆即可。</p>
               </div>
               <form onSubmit={handleEditRecordSubmit} className="space-y-4">
                 <div>

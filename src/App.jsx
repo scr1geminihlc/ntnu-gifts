@@ -11,13 +11,12 @@ import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged }
 let app, auth, db, appId;
 
 try {
-  // 判斷是否在目前的 Canvas 測試環境
   if (typeof __firebase_config !== 'undefined') {
     const firebaseConfig = JSON.parse(__firebase_config);
     app = initializeApp(firebaseConfig);
     appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
   } else {
-    // 💡 您的專屬 Firebase 設定碼 (已自動修正 projectId 格式)
+    // 💡 您的專屬 Firebase 設定碼
     const firebaseConfig = {
       apiKey: "AIzaSyDMVW5Nq_ztnDcD1WYNLCL93O_YeuMBfLw",
       authDomain:  "ntnu-gifts.firebaseapp.com",
@@ -28,7 +27,7 @@ try {
       measurementId: "G-YGYGVS2TCY"
     };
     app = initializeApp(firebaseConfig);
-    appId = 'ntnu-secretariat-gifts'; // 您的專屬應用ID
+    appId = 'ntnu-secretariat-gifts'; 
   }
   auth = getAuth(app);
   db = getFirestore(app);
@@ -36,7 +35,6 @@ try {
   console.error("Firebase 初始化失敗:", error);
 }
 
-// 嚴格遵守路徑規則：供所有秘書公開存取的公共資料集合
 const getGiftsCollectionPath = () => `artifacts/${appId}/public/data/gifts`;
 
 // ==========================================
@@ -69,7 +67,6 @@ const handleImageUpload = (e, callback) => {
   }
 };
 
-// 初始資料 (用來當資料庫完全是空的時候進行初始化填充)
 const initialGifts = [
   {
     id: 'g1',
@@ -124,6 +121,11 @@ export default function App() {
   // UI 狀態
   const [isAddGiftModalOpen, setIsAddGiftModalOpen] = useState(false);
   const [newGiftData, setNewGiftData] = useState({ name: '', stock: '', image: '', isTracked: true, isNumbered: false, totalNumbers: '', note: '' });
+  
+  // 新增：編輯禮品名稱與備註的狀態
+  const [isEditGiftModalOpen, setIsEditGiftModalOpen] = useState(false);
+  const [editGiftData, setEditGiftData] = useState({ name: '', note: '' });
+
   const [isRecipientSearchModalOpen, setIsRecipientSearchModalOpen] = useState(false);
   const [recipientSearchTerm, setRecipientSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -147,11 +149,7 @@ export default function App() {
   const [incomingNumbersStr, setIncomingNumbersStr] = useState(''); 
   const [fullScreenImage, setFullScreenImage] = useState(null); 
 
-  // ==========================================
-  // Firebase 驗證與資料連線
-  // ==========================================
   useEffect(() => {
-    // 1. 初始化登入 (匿名或 Custom Token)
     const initAuth = async () => {
       try {
         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -170,7 +168,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // 2. 登入後，監聽雲端資料庫變化
     if (!user) return;
 
     const path = getGiftsCollectionPath();
@@ -178,14 +175,11 @@ export default function App() {
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       if (snapshot.empty) {
-        // 如果資料庫是空的，寫入預設示範資料
         for (const gift of initialGifts) {
           await setDoc(doc(db, path, gift.id), gift);
         }
       } else {
-        // 更新本地狀態
         const loadedGifts = snapshot.docs.map(d => d.data());
-        // 依照建立時間或 ID 排序 (簡單處理)
         loadedGifts.sort((a, b) => a.id.localeCompare(b.id));
         setGifts(loadedGifts);
       }
@@ -198,7 +192,6 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  // 當雲端資料改變時，同步更新目前開啟的 Modal 內容
   useEffect(() => {
     if (selectedGift) {
       const updated = gifts.find(g => g.id === selectedGift.id);
@@ -206,9 +199,6 @@ export default function App() {
     }
   }, [gifts]);
 
-  // ==========================================
-  // 核心功能邏輯
-  // ==========================================
   const filteredGifts = gifts.filter(gift => 
     gift.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -252,14 +242,12 @@ export default function App() {
     }
   };
 
-  // 替換圖片存入 Firebase
   const updateExistingGiftImage = async (base64Image) => {
     if (!selectedGift || !user) return;
     const updatedGift = { ...selectedGift, image: base64Image };
     await setDoc(doc(db, getGiftsCollectionPath(), selectedGift.id), updatedGift);
   };
 
-  // 儲存修改的歷史紀錄到 Firebase
   const handleEditRecordSubmit = async (e) => {
     e.preventDefault();
     if (!editingRecord || !user) return;
@@ -273,13 +261,34 @@ export default function App() {
     setEditingRecord(null);
   };
 
+  // 打開編輯禮品基本資料的 Modal
+  const openEditGift = () => {
+    setEditGiftData({ name: selectedGift.name, note: selectedGift.note || '' });
+    setIsEditGiftModalOpen(true);
+  };
+
+  // 提交禮品基本資料修改
+  const handleEditGiftSubmit = async (e) => {
+    e.preventDefault();
+    if (!editGiftData.name.trim() || !user) return;
+    
+    const updatedGift = { 
+      ...selectedGift, 
+      name: editGiftData.name.trim(), 
+      note: editGiftData.note 
+    };
+    
+    await setDoc(doc(db, getGiftsCollectionPath(), selectedGift.id), updatedGift);
+    setSelectedGift(updatedGift);
+    setIsEditGiftModalOpen(false);
+  };
+
   const toggleNumberSelection = (num) => {
     setSelectedNumbers(prev => 
       prev.includes(num) ? prev.filter(n => n !== num) : [...prev, num].sort((a,b) => a-b)
     );
   };
 
-  // 提交新增異動到 Firebase
   const handleRecordSubmit = async (e) => {
     e.preventDefault();
     if (selectedGift.isTracked === false || !user) return;
@@ -379,7 +388,6 @@ export default function App() {
       history: [newRecord, ...selectedGift.history]
     };
 
-    // 寫入 Firebase
     await setDoc(doc(db, getGiftsCollectionPath(), selectedGift.id), updatedGift);
 
     setFormData({ ...formData, target: '', change: '', note: '' });
@@ -387,7 +395,6 @@ export default function App() {
     setIncomingNumbersStr('');
   };
 
-  // 新增禮品到 Firebase
   const handleAddGiftSubmit = async (e) => {
     e.preventDefault();
     if (!newGiftData.name || !user) return;
@@ -432,7 +439,6 @@ export default function App() {
       history: newGiftData.isTracked ? [initialHistoryRecord] : []
     };
     
-    // 寫入 Firebase
     await setDoc(doc(db, getGiftsCollectionPath(), newGift.id), newGift);
 
     setIsAddGiftModalOpen(false);
@@ -527,7 +533,6 @@ export default function App() {
             </div>
             <h1 className="text-xl font-bold text-slate-900 hidden sm:block">秘書室禮品管理系統</h1>
             
-            {/* 雲端同步狀態提示 */}
             {isSyncing ? (
               <span className="text-xs font-bold text-amber-600 bg-amber-100 px-2 py-1 rounded-md flex items-center gap-1 animate-pulse">
                 <Cloud size={14} /> 連線中
@@ -664,7 +669,14 @@ export default function App() {
             {selectedGift.isTracked === false ? (
               <div className="w-full p-6 md:p-10 flex flex-col items-center bg-slate-50 overflow-y-auto">
                 <div className="w-full flex justify-between items-center mb-6">
-                   <h2 className="text-2xl font-bold text-slate-900">{selectedGift.name}</h2>
+                   <div className="flex items-center gap-3">
+                     <h2 className="text-2xl font-bold text-slate-900">{selectedGift.name}</h2>
+                     {role === 'admin' && (
+                       <button onClick={openEditGift} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors" title="編輯名稱與備註">
+                         <Edit2 size={18} />
+                       </button>
+                     )}
+                   </div>
                    <button onClick={closeModal} className="p-2 text-slate-400 hover:text-slate-600 bg-slate-200 rounded-full transition-colors"><X size={20} /></button>
                 </div>
                 <div className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-bold mb-6 flex items-center gap-2"><Info size={16} /> 常態供應 / 免登記庫存</div>
@@ -703,7 +715,14 @@ export default function App() {
                   <div className="flex justify-between items-start mb-4">
                     <div className="w-full pr-4">
                       <div className="flex items-center gap-2 mb-1">
-                        <h2 className="text-2xl font-bold text-slate-900">{selectedGift.name}</h2>
+                        <div className="flex items-center gap-3">
+                          <h2 className="text-2xl font-bold text-slate-900">{selectedGift.name}</h2>
+                          {role === 'admin' && (
+                            <button onClick={openEditGift} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors" title="編輯名稱與備註">
+                              <Edit2 size={18} />
+                            </button>
+                          )}
+                        </div>
                         {selectedGift.isNumbered && <span className="bg-slate-800 text-white text-xs px-2 py-0.5 rounded flex items-center gap-1"><Hash size={12}/> 具獨立編號</span>}
                       </div>
                       
@@ -738,6 +757,12 @@ export default function App() {
                         <div className="mt-3 text-xs text-slate-600 bg-white p-2.5 rounded-lg border border-slate-200 shadow-sm">
                           <span className="font-bold block mb-1">目前倉庫現有編號：</span>
                           <span className="font-mono">{selectedGift.availableNumbers.join(', ')}</span>
+                        </div>
+                      )}
+                      {selectedGift.note && (
+                        <div className="mt-3 text-sm text-slate-600 bg-indigo-50/50 p-2.5 rounded-lg border border-indigo-100/50">
+                          <span className="font-bold block mb-1 text-indigo-800">存放位置 / 備註：</span>
+                          {selectedGift.note}
                         </div>
                       )}
                     </div>
@@ -999,6 +1024,33 @@ export default function App() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 編輯禮品基本資料 Modal */}
+      {isEditGiftModalOpen && role === 'admin' && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
+              <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><Edit2 size={20} className="text-indigo-600" /> 編輯禮品資料</h3>
+              <button onClick={() => setIsEditGiftModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-600 bg-white rounded-full shadow-sm"><X size={20} /></button>
+            </div>
+            <div className="p-6">
+              <form onSubmit={handleEditGiftSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">禮品名稱</label>
+                  <input type="text" required value={editGiftData.name} onChange={(e) => setEditGiftData({...editGiftData, name: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">存放位置或說明 (備註)</label>
+                  <textarea rows="3" placeholder="例如：存放於秘書室鐵櫃" value={editGiftData.note} onChange={(e) => setEditGiftData({...editGiftData, note: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" />
+                </div>
+                <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition-colors mt-2 flex justify-center items-center gap-2">
+                  儲存修改
+                </button>
+              </form>
+            </div>
           </div>
         </div>
       )}

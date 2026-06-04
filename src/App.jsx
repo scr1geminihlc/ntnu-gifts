@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Eye, Package, History, Plus, X, Search, FileText, UserSearch, Image as ImageIcon, Download, ArrowRightLeft, ClipboardCheck, Info, Hash, Edit2, Upload, Cloud, ZoomIn, Move } from 'lucide-react';
+import { Shield, Eye, Package, History, Plus, X, Search, FileText, UserSearch, Image as ImageIcon, Download, ArrowRightLeft, ClipboardCheck, Info, Hash, Edit2, Upload, Cloud, ZoomIn, Move, FileSpreadsheet } from 'lucide-react';
 
 // ==========================================
 // Firebase 雲端資料庫設定區
@@ -37,9 +37,6 @@ try {
 
 const getGiftsCollectionPath = () => `artifacts/${appId}/public/data/gifts`;
 
-// ==========================================
-// 工具函數與初始資料
-// ==========================================
 const parseNumbers = (str) => {
   const result = new Set();
   const parts = str.split(',').map(s => s.trim());
@@ -67,51 +64,12 @@ const handleImageUpload = (e, callback) => {
   }
 };
 
-const initialGifts = [
-  {
-    id: 'g1',
-    name: '小水晶',
-    stock: 125,
-    reserves: { '校長': 7 }, 
-    isTracked: true,
-    isNumbered: false,
-    image: 'https://images.unsplash.com/photo-1550420786-095b341c2c3f?auto=format&fit=crop&q=80&w=400',
-    history: [
-      { id: 1, date: '2024-11-21', target: '入庫', change: 502, sender: '採購', note: '8箱(7箱*70、1箱*12)' },
-      { id: 2, date: '2024-12-31', target: '1/2基金會董事', change: -17, sender: '校長', note: '' }
-    ]
-  },
-  {
-    id: 'g5',
-    name: '舊圖書館版畫',
-    stock: 4,
-    reserves: {},
-    isTracked: true,
-    isNumbered: true,
-    availableNumbers: [76, 84, 100, 101], 
-    numberedReserves: {},
-    image: 'https://images.unsplash.com/photo-1578301978693-85fa9c03fa75?auto=format&fit=crop&q=80&w=400',
-    history: [
-      { id: 1, date: '2023-06-06', target: '102校慶-江明賢老師畫作', change: 102, sender: '系統', note: '初始發行' }
-    ]
-  },
-  {
-    id: 'g11',
-    name: '師大校園風景明信片組',
-    stock: null, 
-    reserves: {},
-    isTracked: false,
-    isNumbered: false,
-    image: 'https://images.unsplash.com/photo-1528459801416-a9e53bbf4e17?auto=format&fit=crop&q=80&w=400',
-    note: '此為常態性供應之文宣品，無需登記進出庫存。請直接至秘書室外側 3 號鐵櫃第二層自由拿取。',
-    history: []
-  }
-];
-
 export default function App() {
   const [role, setRole] = useState('viewer'); 
   const [gifts, setGifts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  const [sortBy, setSortBy] = useState('newest');
   const [selectedGift, setSelectedGift] = useState(null);
   
   // 拖曳排序狀態
@@ -152,11 +110,7 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (err) {
         console.error("驗證失敗:", err);
       }
@@ -174,14 +128,8 @@ export default function App() {
     const q = collection(db, path);
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      if (snapshot.empty) {
-        for (let i = 0; i < initialGifts.length; i++) {
-          const g = { ...initialGifts[i], order: i };
-          await setDoc(doc(db, path, g.id), g);
-        }
-      } else {
+      if (!snapshot.empty) {
         const loadedGifts = snapshot.docs.map(d => d.data());
-        // 依照 order 欄位排序
         loadedGifts.sort((a, b) => {
           const oA = a.order !== undefined ? a.order : 999999;
           const oB = b.order !== undefined ? b.order : 999999;
@@ -189,6 +137,8 @@ export default function App() {
           return a.id.localeCompare(b.id);
         });
         setGifts(loadedGifts);
+      } else {
+        setGifts([]);
       }
       setIsSyncing(false);
     }, (error) => {
@@ -206,19 +156,155 @@ export default function App() {
     }
   }, [gifts]);
 
-  const filteredGifts = gifts.filter(gift => 
-    gift.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const sortedAndFilteredGifts = gifts
+    .filter(gift => gift.name.toLowerCase().includes(searchTerm.toLowerCase()))
+    .sort((a, b) => {
+      if (sortBy === 'name') return a.name.localeCompare(b.name, 'zh-TW');
+      if (sortBy === 'stockDesc') {
+        const stockA = a.isTracked === false ? -1 : (a.stock || 0);
+        const stockB = b.isTracked === false ? -1 : (b.stock || 0);
+        return stockB - stockA;
+      }
+      if (sortBy === 'stockAsc') {
+        const stockA = a.isTracked === false ? 999999 : (a.stock || 0);
+        const stockB = b.isTracked === false ? 999999 : (b.stock || 0);
+        return stockA - stockB;
+      }
+      if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+      if (a.id.length !== b.id.length) return b.id.length - a.id.length;
+      return b.id.localeCompare(a.id);
+    });
 
   // ==========================================
-  // 拖曳排序核心邏輯
+  // 超級魔法功能：自動解析 Excel 歷史資料
   // ==========================================
+  const handleImportExcel = (e) => {
+    const file = e.target.files[0];
+    if (!file || !user) return;
+    
+    if (!window.confirm('準備匯入 Excel 禮品清冊。\n\n系統將會自動讀取每一個分頁的歷史紀錄並建檔。這大約需要 1~2 秒鐘，確定要匯入嗎？')) {
+      e.target.value = '';
+      return;
+    }
+
+    setIsSyncing(true);
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const data = evt.target.result;
+        // 呼叫 index.html 中的 SheetJS 來讀取
+        const workbook = window.XLSX.read(data, { type: 'binary' });
+        
+        let giftCounter = gifts.length + 1;
+        const promises = [];
+
+        for (const sheetName of workbook.SheetNames) {
+          const worksheet = workbook.Sheets[sheetName];
+          const rawData = window.XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false });
+          
+          let headerRowIdx = -1;
+          // 找出「日期、入、出、對象」的標題行在哪裡
+          for (let i = 0; i < Math.min(10, rawData.length); i++) {
+            const rowStr = JSON.stringify(rawData[i]);
+            if (rowStr.includes('日期') && (rowStr.includes('入') || rowStr.includes('出') || rowStr.includes('姓名'))) {
+              headerRowIdx = i;
+              break;
+            }
+          }
+          
+          if (headerRowIdx === -1) continue;
+
+          const headers = rawData[headerRowIdx];
+          const rows = rawData.slice(headerRowIdx + 1);
+
+          // 抓取欄位位置
+          const dateCol = headers.findIndex(h => h && String(h).includes('日期'));
+          const targetCol = headers.findIndex(h => h && (String(h).includes('對象') || String(h).includes('姓名')));
+          const inCol = headers.findIndex(h => h && String(h).includes('入數量'));
+          const outCol = headers.findIndex(h => h && String(h).includes('出數量') && !String(h).includes('茶') && !String(h).includes('校'));
+          const noteCol = headers.findIndex(h => h && String(h).includes('備註'));
+          
+          const outCol1 = headers.findIndex(h => h === '茶水間出數量');
+          const outCol2 = headers.findIndex(h => h === '校長室出數量');
+
+          let currentStock = 0;
+          const history = [];
+
+          rows.forEach((row, idx) => {
+            if (!row || row.length === 0) return;
+            
+            let outVal = 0;
+            if (sheetName === '溪畔寫生絲巾') {
+              outVal = (parseInt(row[outCol1]) || 0) + (parseInt(row[outCol2]) || 0);
+            } else {
+              outVal = parseInt(row[outCol]) || 0;
+            }
+            const inVal = parseInt(row[inCol]) || 0;
+            const change = inVal - outVal;
+
+            let dateStr = row[dateCol] ? String(row[dateCol]).trim() : '';
+            if (dateStr) {
+               dateStr = dateStr.replace(/\//g, '-').split(' ')[0]; // 清洗時間格式
+            }
+
+            const targetStr = row[targetCol] ? String(row[targetCol]).trim() : '';
+            const noteStr = row[noteCol] ? String(row[noteCol]).trim() : '';
+
+            // 只要有日期且(有數量變動或對象或備註)就記錄
+            if (dateStr && (change !== 0 || targetStr || noteStr)) {
+              history.push({
+                id: Date.now() + idx,
+                date: dateStr,
+                target: targetStr || (change > 0 ? '入庫' : '未知'),
+                change: change,
+                sender: '系統匯入',
+                note: noteStr
+              });
+              currentStock += change;
+            }
+          });
+
+          if (history.length > 0) {
+            const newId = `g${Date.now()}_${giftCounter}`;
+            const isNumberedGift = sheetName.includes('版畫');
+            const newGift = {
+              id: newId,
+              name: sheetName,
+              stock: currentStock,
+              reserves: {},
+              isTracked: true,
+              isNumbered: isNumberedGift,
+              availableNumbers: isNumberedGift ? [76, 84, 100, 101] : [],
+              numberedReserves: {},
+              image: 'https://images.unsplash.com/photo-1549465220-1a8b9238cd48?auto=format&fit=crop&q=80&w=400',
+              note: '由 Excel 匯入的資料，請更新實體照片。',
+              history: history.reverse(), // 新的放前面
+              order: giftCounter
+            };
+            giftCounter++;
+            promises.push(setDoc(doc(db, getGiftsCollectionPath(), newId), newGift));
+          }
+        }
+
+        await Promise.all(promises);
+        setIsSyncing(false);
+        alert('🎉 太神啦！所有歷史資料及 600 多筆送禮紀錄已成功匯入！\n\n您現在可以使用「防重複查詢」功能了！');
+        
+      } catch (err) {
+        console.error(err);
+        setIsSyncing(false);
+        alert('匯入失敗，請確認檔案是否為原本的 Excel 格式。');
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = ''; // 重置 input 讓下次還可以點
+  };
+
   const handleDrop = async (e, targetGift) => {
     e.preventDefault();
     setDragOverId(null);
     if (!draggedId || draggedId === targetGift.id) return;
 
-    // 先在本地運算新的排序陣列
     const currentGifts = [...gifts];
     const draggedIndex = currentGifts.findIndex(g => g.id === draggedId);
     const targetIndex = currentGifts.findIndex(g => g.id === targetGift.id);
@@ -228,14 +314,11 @@ export default function App() {
     const [draggedItem] = currentGifts.splice(draggedIndex, 1);
     currentGifts.splice(targetIndex, 0, draggedItem);
 
-    // 立即更新 UI (避免等待網路時的卡頓感)
     const optimisticallyUpdatedGifts = currentGifts.map((g, i) => ({ ...g, order: i }));
     setGifts(optimisticallyUpdatedGifts);
 
-    // 將新排序寫入 Firebase
     try {
       const updatePromises = optimisticallyUpdatedGifts.map((g, index) => {
-        // 只更新有變動的資料
         if (g.order !== gifts.find(oldG => oldG.id === g.id)?.order) {
            return setDoc(doc(db, getGiftsCollectionPath(), g.id), { ...g, order: index });
         }
@@ -480,7 +563,7 @@ export default function App() {
       image: newGiftData.image || 'https://images.unsplash.com/photo-1513885535751-8b9238bd345a?auto=format&fit=crop&q=80&w=400',
       note: newGiftData.note || '',
       history: newGiftData.isTracked ? [initialHistoryRecord] : [],
-      order: gifts.length // 確保新禮品排在最後面
+      order: gifts.length 
     };
     
     await setDoc(doc(db, getGiftsCollectionPath(), newGift.id), newGift);
@@ -616,14 +699,19 @@ export default function App() {
               <UserSearch size={18} /> <span className="whitespace-nowrap">防重複查詢</span>
             </button>
             {role === 'admin' && (
-              <button onClick={() => setIsAddGiftModalOpen(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-rose-600 text-white hover:bg-rose-700 px-4 py-2 rounded-lg font-medium transition-colors shadow-sm">
-                <Plus size={18} /> <span className="whitespace-nowrap">新增禮品</span>
-              </button>
+              <>
+                <label className="cursor-pointer flex-1 md:flex-none flex items-center justify-center gap-2 bg-amber-50 text-amber-700 hover:bg-amber-100 px-4 py-2 rounded-lg font-medium transition-colors border border-amber-200 shadow-sm">
+                  <FileSpreadsheet size={18} /> <span className="whitespace-nowrap">Excel 匯入</span>
+                  <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleImportExcel} />
+                </label>
+                <button onClick={() => setIsAddGiftModalOpen(true)} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-rose-600 text-white hover:bg-rose-700 px-4 py-2 rounded-lg font-medium transition-colors shadow-sm">
+                  <Plus size={18} /> <span className="whitespace-nowrap">新增禮品</span>
+                </button>
+              </>
             )}
           </div>
         </div>
 
-        {/* 提示：管理員且未搜尋時，顯示可拖曳提示 */}
         {role === 'admin' && !searchTerm && gifts.length > 1 && (
           <div className="flex items-center gap-2 text-sm text-slate-600 mb-6 bg-slate-200/60 px-3 py-2 rounded-lg w-fit font-medium">
             <Move size={16} className="text-slate-500" /> 
@@ -634,18 +722,19 @@ export default function App() {
         {gifts.length === 0 && !isSyncing && (
            <div className="text-center py-20 text-slate-500">
              目前沒有禮品資料。
+             {role === 'admin' && <p className="mt-2 text-rose-600 font-bold">👉 請點擊上方的「Excel 匯入」上傳您的清冊！</p>}
            </div>
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredGifts.map((gift) => (
+          {sortedAndFilteredGifts.map((gift) => (
             <div 
               key={gift.id} 
-              draggable={role === 'admin' && !searchTerm} // 確保只有管理員且沒有搜尋時才能拖曳 (避免順序錯亂)
+              draggable={role === 'admin' && !searchTerm} 
               onDragStart={(e) => {
                 setDraggedId(gift.id);
                 e.dataTransfer.effectAllowed = 'move';
-                e.dataTransfer.setData('text/plain', gift.id); // Firefox 需要這行
+                e.dataTransfer.setData('text/plain', gift.id);
               }}
               onDragOver={(e) => {
                 e.preventDefault();

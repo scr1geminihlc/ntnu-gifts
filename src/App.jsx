@@ -454,14 +454,65 @@ export default function App() {
     await setDoc(doc(db, getGiftsCollectionPath(), selectedGift.id), updatedGift);
   };
 
+  // ==========================================
+  // 更新：處理編輯歷史紀錄時，針對無編號禮品的數量重新計算
+  // ==========================================
   const handleEditRecordSubmit = async (e) => {
     e.preventDefault();
     if (!editingRecord || !user) return;
 
+    const oldRecord = selectedGift.history.find(r => r.id === editingRecord.id);
+    let newStock = selectedGift.stock;
+    let newReserves = { ...(selectedGift.reserves || {}) };
+
+    if (!selectedGift.isNumbered) {
+      const oldChange = parseInt(oldRecord.change, 10) || 0;
+      const newChange = parseInt(editingRecord.change, 10) || 0;
+      
+      // 1. 先反向扣除舊紀錄的影響
+      const oldIsWithdraw = oldRecord.target.includes('【提領備用】');
+      const oldIsLog = oldRecord.target.includes('【備用補登】');
+      const oldIsNormalOut = oldChange < 0 && !oldIsWithdraw && !oldIsLog;
+      const oldIsNormalIn = oldChange > 0 && !oldIsLog;
+      const oldSender = oldRecord.sender;
+      const oldAbs = Math.abs(oldChange);
+
+      if (oldIsNormalOut) { newStock += oldAbs; }
+      else if (oldIsNormalIn) { newStock -= oldAbs; }
+      else if (oldIsWithdraw) {
+          newStock += oldAbs;
+          if (newReserves[oldSender]) newReserves[oldSender] = Math.max(0, newReserves[oldSender] - oldAbs);
+      }
+      else if (oldIsLog) {
+          if (!newReserves[oldSender]) newReserves[oldSender] = 0;
+          newReserves[oldSender] += oldAbs;
+      }
+
+      // 2. 加上新修改的紀錄影響
+      const newIsWithdraw = editingRecord.target.includes('【提領備用】');
+      const newIsLog = editingRecord.target.includes('【備用補登】');
+      const newIsNormalOut = newChange < 0 && !newIsWithdraw && !newIsLog;
+      const newIsNormalIn = newChange > 0 && !newIsLog;
+      const newSender = editingRecord.sender;
+      const newAbs = Math.abs(newChange);
+
+      if (newIsNormalOut) { newStock -= newAbs; }
+      else if (newIsNormalIn) { newStock += newAbs; }
+      else if (newIsWithdraw) {
+          newStock -= newAbs;
+          newReserves[newSender] = (newReserves[newSender] || 0) + newAbs;
+      }
+      else if (newIsLog) {
+          newReserves[newSender] = Math.max(0, (newReserves[newSender] || 0) - newAbs);
+      }
+
+      editingRecord.change = newChange;
+    }
+
     const updatedHistory = selectedGift.history.map(record =>
       record.id === editingRecord.id ? editingRecord : record
     );
-    const updatedGift = { ...selectedGift, history: updatedHistory };
+    const updatedGift = { ...selectedGift, history: updatedHistory, stock: newStock, reserves: newReserves };
     
     await setDoc(doc(db, getGiftsCollectionPath(), selectedGift.id), updatedGift);
     setEditingRecord(null);
@@ -1235,14 +1286,10 @@ export default function App() {
                       {selectedGift.history.length === 0 ? (
                         <div className="text-center text-slate-400 py-10">尚無紀錄</div>
                       ) : (
-                        // ==========================================
-                        // 新增：將歷史紀錄強制依時間反序 (最新到舊)
-                        // ==========================================
                         [...selectedGift.history]
                         .sort((a, b) => {
                           const dA = new Date(a.date).getTime() || 0;
                           const dB = new Date(b.date).getTime() || 0;
-                          // 若日期相同，用 id 排序保持穩定性
                           if (dB === dA) return (b.id || 0) - (a.id || 0);
                           return dB - dA;
                         })
@@ -1278,7 +1325,7 @@ export default function App() {
                                       <button 
                                         onClick={() => setEditingRecord(record)}
                                         className="p-1.5 text-slate-400 hover:text-indigo-600 bg-slate-50 hover:bg-indigo-100 rounded-md transition-colors"
-                                        title="編輯紀錄文字內容"
+                                        title="編輯紀錄"
                                       >
                                         <Edit2 size={16} />
                                       </button>
@@ -1341,7 +1388,7 @@ export default function App() {
             <div className="p-6 overflow-y-auto max-h-[70vh]">
               <div className="mb-5 p-3.5 bg-indigo-50 rounded-xl text-sm text-indigo-800 flex items-start gap-2.5 border border-indigo-100 leading-relaxed">
                 <Info size={18} className="mt-0.5 flex-shrink-0 text-indigo-600" />
-                <p>若發現實際盤點與系統紀錄有落差，您可在此處進行**強制校正**。修改後將直接覆蓋系統當前狀態。</p>
+                <p>若發現實際盤點與系統紀錄有落差，您可在此處進行<strong>強制校正</strong>。修改後將直接覆蓋系統當前狀態。</p>
               </div>
               <form onSubmit={handleEditGiftSubmit} className="space-y-4">
                 <div>
@@ -1569,7 +1616,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 修改歷史紀錄 Modal (純文字) */}
+      {/* 修改歷史紀錄 Modal */}
       {editingRecord && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">
@@ -1578,15 +1625,31 @@ export default function App() {
               <button onClick={() => setEditingRecord(null)} className="p-2 text-slate-400 hover:text-slate-600 bg-white rounded-full shadow-sm"><X size={20} /></button>
             </div>
             <div className="p-6">
-              <div className="mb-5 p-3.5 bg-amber-50 rounded-xl text-sm text-amber-800 flex items-start gap-2.5 border border-amber-100 leading-relaxed">
-                <Info size={18} className="mt-0.5 flex-shrink-0 text-amber-600" />
-                <p>為確保庫存與限量編號的連動正確性，此處僅供修改<strong>文字紀錄 (日期、對象、經手人與備註)</strong>。若原登記的「數量」或「編號」有誤，請直接<strong>刪除該筆紀錄</strong>（系統會自動加回庫存與編號），再重新新增一筆即可。</p>
-              </div>
+              {selectedGift.isNumbered ? (
+                <div className="mb-5 p-3.5 bg-amber-50 rounded-xl text-sm text-amber-800 flex items-start gap-2.5 border border-amber-100 leading-relaxed">
+                  <Info size={18} className="mt-0.5 flex-shrink-0 text-amber-600" />
+                  <p>為確保庫存與限量編號的連動正確性，此處僅供修改<strong>文字紀錄 (日期、對象、經手人與備註)</strong>。若原登記的「數量」或「編號」有誤，請直接<strong>刪除該筆紀錄</strong>（系統會自動加回庫存與編號），再重新新增一筆即可。</p>
+                </div>
+              ) : (
+                <div className="mb-5 p-3.5 bg-blue-50 rounded-xl text-sm text-blue-800 flex items-start gap-2.5 border border-blue-100 leading-relaxed">
+                  <Info size={18} className="mt-0.5 flex-shrink-0 text-blue-600" />
+                  <p>您可在此直接修改此筆紀錄的<strong>文字內容與數量</strong>，儲存後系統將會自動為您重新計算總庫存。</p>
+                </div>
+              )}
+
               <form onSubmit={handleEditRecordSubmit} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">日期</label>
                   <input type="date" required value={editingRecord.date} onChange={(e) => setEditingRecord({...editingRecord, date: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
                 </div>
+
+                {!selectedGift.isNumbered && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">數量 (+進, -出)</label>
+                    <input type="number" required value={editingRecord.change} onChange={(e) => setEditingRecord({...editingRecord, change: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono" />
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">贈送者 / 經手人</label>
                   <input type="text" value={editingRecord.sender || ''} onChange={(e) => setEditingRecord({...editingRecord, sender: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" />

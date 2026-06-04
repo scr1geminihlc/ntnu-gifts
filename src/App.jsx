@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Eye, Package, History, Plus, X, Search, FileText, UserSearch, Image as ImageIcon, Download, ArrowRightLeft, ClipboardCheck, Info, Hash, Edit2, Upload, Cloud, ZoomIn, Move, FileSpreadsheet, Trash2 } from 'lucide-react';
+import { Shield, Eye, Package, History, Plus, X, Search, FileText, UserSearch, Image as ImageIcon, Download, ArrowRightLeft, ClipboardCheck, Info, Hash, Edit2, Upload, Cloud, ZoomIn, Move, FileSpreadsheet, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 
 // ==========================================
 // Firebase 雲端資料庫設定區
@@ -86,6 +86,9 @@ export default function App() {
 
   const [isRecipientSearchModalOpen, setIsRecipientSearchModalOpen] = useState(false);
   const [recipientSearchTerm, setRecipientSearchTerm] = useState('');
+  // 新增：用來追蹤哪些查詢結果被展開了
+  const [expandedSearchItems, setExpandedSearchItems] = useState({});
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
@@ -362,9 +365,6 @@ export default function App() {
     }
   };
 
-  // ==========================================
-  // 新增：刪除禮品與刪除單筆紀錄功能
-  // ==========================================
   const handleDeleteGift = async () => {
     if (!selectedGift || !user || role !== 'admin') return;
     const isConfirm = window.confirm(`⚠️ 警告：確定要永久刪除「${selectedGift.name}」嗎？\n\n這將會連同裡面所有的進出歷史紀錄一併刪除，且無法復原！`);
@@ -1361,12 +1361,19 @@ export default function App() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-50">
               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><UserSearch size={20} className="text-indigo-600" /> 防重複送禮：對象查詢</h3>
-              <button onClick={() => { setIsRecipientSearchModalOpen(false); setRecipientSearchTerm(''); }} className="p-2 text-slate-400 hover:text-slate-600 bg-white rounded-full shadow-sm"><X size={20} /></button>
+              <button onClick={() => { 
+                setIsRecipientSearchModalOpen(false); 
+                setRecipientSearchTerm(''); 
+                setExpandedSearchItems({}); 
+              }} className="p-2 text-slate-400 hover:text-slate-600 bg-white rounded-full shadow-sm"><X size={20} /></button>
             </div>
             <div className="p-6 border-b border-slate-100 bg-white">
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Search className="h-5 w-5 text-indigo-400" /></div>
-                <input type="text" autoFocus placeholder="輸入對象姓名、單位或職稱 (如：校長、基金會)..." value={recipientSearchTerm} onChange={(e) => setRecipientSearchTerm(e.target.value)} className="block w-full pl-10 pr-3 py-3 border-2 border-indigo-100 rounded-xl leading-5 bg-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-indigo-400 transition-colors text-lg" />
+                <input type="text" autoFocus placeholder="輸入對象姓名、單位或職稱 (如：校長、基金會)..." value={recipientSearchTerm} onChange={(e) => {
+                  setRecipientSearchTerm(e.target.value);
+                  setExpandedSearchItems({}); // 搜尋字詞改變時重置展開狀態
+                }} className="block w-full pl-10 pr-3 py-3 border-2 border-indigo-100 rounded-xl leading-5 bg-white placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-indigo-400 transition-colors text-lg" />
               </div>
             </div>
             <div className="p-6 overflow-y-auto flex-1 bg-slate-50 min-h-[300px]">
@@ -1377,29 +1384,56 @@ export default function App() {
               ) : (
                 <div className="space-y-3">
                   <div className="text-sm text-slate-500 mb-4">找到 {getRecipientHistory().length} 筆包含「<span className="font-bold text-indigo-600">{recipientSearchTerm}</span>」的送出紀錄：</div>
-                  {getRecipientHistory().map((record, idx) => (
-                    <div key={idx} className="flex gap-4 p-4 rounded-xl border border-slate-200 bg-white shadow-sm items-center hover:shadow-md transition-shadow">
-                      <img src={record.giftImage} alt={record.giftName} className="w-14 h-14 rounded-lg object-cover border border-slate-100" />
+                  {getRecipientHistory().map((record, idx) => {
+                    const isExpanded = expandedSearchItems[idx];
+                    // 判斷是否需要出現「展開」按鈕：字數太長，或包含換行符號
+                    const needsExpansion = record.target.length > 30 || record.target.includes('\n') || (record.note && record.note.length > 30) || (record.note && record.note.includes('\n'));
+                    
+                    return (
+                    <div key={idx} className="flex gap-4 p-4 rounded-xl border border-slate-200 bg-white shadow-sm items-start hover:shadow-md transition-shadow">
+                      <img src={record.giftImage} alt={record.giftName} className="w-14 h-14 rounded-lg object-cover border border-slate-100 flex-shrink-0 mt-1" />
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start">
-                          <div className="font-bold text-slate-800 text-lg truncate pr-2">{record.target}</div>
-                          <div className="text-sm font-mono font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-md whitespace-nowrap">致贈 {Math.abs(record.change)} 件</div>
+                          <div className="flex-1 min-w-0 pr-4">
+                            <div className={`font-bold text-slate-800 text-lg leading-snug ${isExpanded ? 'whitespace-pre-wrap' : 'truncate'}`}>
+                              {record.target}
+                            </div>
+                            {needsExpansion && (
+                              <button 
+                                onClick={() => setExpandedSearchItems(prev => ({...prev, [idx]: !prev[idx]}))}
+                                className="text-sm text-indigo-600 font-bold hover:text-indigo-800 mt-1.5 flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition-colors w-fit"
+                              >
+                                {isExpanded ? <><ChevronUp size={16}/> 收合名單</> : <><ChevronDown size={16}/> 展開完整名單與備註</>}
+                              </button>
+                            )}
+                          </div>
+                          <div className="text-sm font-mono font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-md whitespace-nowrap flex-shrink-0">
+                            致贈 {Math.abs(record.change)} 件
+                          </div>
                         </div>
+                        
                         {record.serialNumbers && (
-                          <div className="text-xs text-slate-500 mt-1 font-mono">
-                            綁定編號: {record.serialNumbers.join(', ')}
+                          <div className="text-xs text-slate-500 mt-2 font-mono bg-slate-50 p-1.5 rounded inline-block">
+                            <span className="font-bold text-slate-600">綁定編號:</span> {record.serialNumbers.join(', ')}
                           </div>
                         )}
-                        <div className="text-sm text-slate-600 mt-1 flex flex-wrap items-center gap-2">
+                        
+                        <div className="text-sm text-slate-600 mt-2 flex flex-wrap items-center gap-2">
                           <span className="font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">{record.giftName}</span>
                           <span className="text-slate-300">|</span> 
                           <span className="flex items-center gap-1"><History size={14} />{record.date}</span>
                           {record.sender && (<><span className="text-slate-300">|</span><span className="flex items-center gap-1 text-slate-500"><UserSearch size={14} />由 {record.sender} 致贈</span></>)}
                         </div>
-                        {record.note && <div className="text-xs text-slate-500 mt-2 truncate bg-slate-50 p-1.5 rounded inline-block">{record.note}</div>}
+                        
+                        {record.note && (
+                          <div className={`text-sm text-slate-500 mt-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed ${isExpanded ? 'whitespace-pre-wrap' : 'truncate'}`}>
+                            <span className="font-bold text-slate-700 mr-1.5">備註:</span>
+                            {record.note}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               )}
             </div>

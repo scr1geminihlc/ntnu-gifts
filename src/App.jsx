@@ -70,7 +70,7 @@ const getSenderColorClasses = (sender) => {
   if (sender.includes('張副')) return 'text-emerald-700 bg-emerald-50 border-emerald-200';
   if (sender.includes('楊副')) return 'text-amber-700 bg-amber-50 border-amber-200';
   if (sender.includes('主秘')) return 'text-purple-700 bg-purple-50 border-purple-200';
-  if (sender.includes('校長')) return 'text-pink-700 bg-pink-50 border-pink-200';
+  if (sender.includes('校長') || sender.includes('宋校長')) return 'text-pink-700 bg-pink-50 border-pink-200';
   return 'text-slate-600 bg-slate-100 border-slate-200';
 };
 
@@ -106,7 +106,7 @@ export default function App() {
   const [formData, setFormData] = useState({
     recordType: 'normal', 
     date: new Date().toISOString().split('T')[0],
-    senderOption: '校長', 
+    senderOption: '宋校長', 
     customSender: '',
     target: '',
     change: '',
@@ -349,7 +349,7 @@ export default function App() {
     setFormData({
       recordType: 'normal',
       date: new Date().toISOString().split('T')[0],
-      senderOption: '校長',
+      senderOption: '宋校長',
       customSender: '',
       target: '',
       change: '',
@@ -953,7 +953,7 @@ export default function App() {
                     </p>
                   ) : (
                     <p className="text-sm text-blue-600 flex items-center gap-1">
-                      常態供應禮品，無需控管
+                      數量有限，送完為止。
                     </p>
                   )}
                 </div>
@@ -1012,7 +1012,7 @@ export default function App() {
                    </div>
                    <button onClick={closeModal} className="p-2 text-slate-400 hover:text-slate-600 bg-slate-200 rounded-full transition-colors"><X size={20} /></button>
                 </div>
-                <div className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-bold mb-6 flex items-center gap-2"><Info size={16} /> 常態供應 / 免登記庫存</div>
+                <div className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-bold mb-6 flex items-center gap-2"><Info size={16} /> 免登記庫存</div>
                 
                 <div 
                   className="rounded-xl overflow-hidden w-full max-w-2xl shadow-md border border-slate-200 mb-6 bg-slate-50 relative group flex items-center justify-center p-4 cursor-pointer"
@@ -1152,7 +1152,7 @@ export default function App() {
                           </label>
                           <div className="flex gap-2">
                             <select value={formData.senderOption} onChange={(e) => setFormData({...formData, senderOption: e.target.value})} className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none bg-white">
-                              <option value="校長">校長</option>
+                              <option value="宋校長">宋校長</option>
                               <option value="陳副校長">陳副校長</option>
                               <option value="張副校長">張副校長</option>
                               <option value="楊副校長">楊副校長</option>
@@ -1247,7 +1247,6 @@ export default function App() {
                         {formData.recordType !== 'withdraw' && (
                           <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">對象 / 事項</label>
-                            {/* 更新：改為 textarea 支援換行 */}
                             <textarea rows="3" required placeholder={formData.recordType === 'log' ? '請輸入補登之贈送對象' : '例: 贈送給某某校長'} value={formData.target} onChange={(e) => setFormData({...formData, target: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none" />
                           </div>
                         )}
@@ -1318,7 +1317,6 @@ export default function App() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex justify-between items-start mb-1">
-                                {/* 更新：加上 whitespace-pre-wrap 支援自動換行顯示 */}
                                 <span className={`font-bold text-lg pr-2 whitespace-pre-wrap ${isLog ? 'text-indigo-800' : isWithdraw ? 'text-amber-800' : 'text-slate-800'}`} style={{ wordBreak: 'break-word' }}>
                                   {record.target}
                                 </span>
@@ -1361,7 +1359,7 @@ export default function App() {
                                 </span>
                                 {record.sender && (
                                   <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded font-medium ${getSenderColorClasses(record.sender)}`}>
-                                    <UserSearch size={14} />由 {record.sender} 致贈
+                                    <UserSearch size={14} /> {isWithdraw ? '提領人' : '經手/致贈'}: {record.sender}
                                   </span>
                                 )}
                               </div>
@@ -1663,7 +1661,6 @@ export default function App() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">對象 / 事項</label>
-                  {/* 更新：改為 textarea 支援換行 */}
                   <textarea rows="3" required value={editingRecord.target} onChange={(e) => setEditingRecord({...editingRecord, target: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
                 </div>
                 <div>

@@ -954,7 +954,7 @@ export default function App() {
                     </p>
                   ) : (
                     <p className="text-sm text-blue-600 flex items-center gap-1">
-                      常態供應禮品，無需控管
+                      數量有限，送完為止。
                     </p>
                   )}
                 </div>
@@ -1013,7 +1013,7 @@ export default function App() {
                    </div>
                    <button onClick={closeModal} className="p-2 text-slate-400 hover:text-slate-600 bg-slate-200 rounded-full transition-colors"><X size={20} /></button>
                 </div>
-                <div className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-bold mb-6 flex items-center gap-2"><Info size={16} /> 常態供應 / 免登記庫存</div>
+                <div className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-bold mb-6 flex items-center gap-2"><Info size={16} /> 免登記庫存</div>
                 
                 <div 
                   className="rounded-xl overflow-hidden w-full max-w-2xl shadow-md border border-slate-200 mb-6 bg-slate-50 relative group flex items-center justify-center p-4 cursor-pointer"

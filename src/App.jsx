@@ -91,8 +91,9 @@ export default function App() {
   const [isAddGiftModalOpen, setIsAddGiftModalOpen] = useState(false);
   const [newGiftData, setNewGiftData] = useState({ name: '', stock: '', image: '', isTracked: true, isNumbered: false, totalNumbers: '', note: '' });
   
+  // 更新：加入 reserves 陣列供編輯
   const [isEditGiftModalOpen, setIsEditGiftModalOpen] = useState(false);
-  const [editGiftData, setEditGiftData] = useState({ name: '', note: '', stock: 0, availableNumbersStr: '' });
+  const [editGiftData, setEditGiftData] = useState({ name: '', note: '', stock: 0, availableNumbersStr: '', reserves: [] });
 
   const [isRecipientSearchModalOpen, setIsRecipientSearchModalOpen] = useState(false);
   const [recipientSearchTerm, setRecipientSearchTerm] = useState('');
@@ -528,9 +529,29 @@ export default function App() {
       name: selectedGift.name, 
       note: selectedGift.note || '',
       stock: selectedGift.stock || 0,
-      availableNumbersStr: selectedGift.availableNumbers ? selectedGift.availableNumbers.join(', ') : ''
+      availableNumbersStr: selectedGift.availableNumbers ? selectedGift.availableNumbers.join(', ') : '',
+      reserves: selectedGift.reserves ? Object.entries(selectedGift.reserves).map(([name, qty]) => ({ name, qty })) : []
     });
     setIsEditGiftModalOpen(true);
+  };
+
+  const handleReserveChange = (index, field, value) => {
+    const newReserves = [...editGiftData.reserves];
+    newReserves[index][field] = value;
+    setEditGiftData({ ...editGiftData, reserves: newReserves });
+  };
+
+  const handleAddReserve = () => {
+    setEditGiftData({
+      ...editGiftData,
+      reserves: [...(editGiftData.reserves || []), { name: '', qty: 0 }]
+    });
+  };
+
+  const handleRemoveReserve = (index) => {
+    const newReserves = [...editGiftData.reserves];
+    newReserves.splice(index, 1);
+    setEditGiftData({ ...editGiftData, reserves: newReserves });
   };
 
   const handleEditGiftSubmit = async (e) => {
@@ -544,13 +565,24 @@ export default function App() {
       newAvailableNumbers = parseNumbers(editGiftData.availableNumbersStr);
       finalStock = newAvailableNumbers.length;
     }
+
+    let finalReserves = {};
+    if (editGiftData.reserves) {
+      editGiftData.reserves.forEach(r => {
+        const qty = parseInt(r.qty, 10);
+        if (r.name.trim() && !isNaN(qty) && qty > 0) {
+          finalReserves[r.name.trim()] = qty;
+        }
+      });
+    }
     
     const updatedGift = { 
       ...selectedGift, 
       name: editGiftData.name.trim(), 
       note: editGiftData.note,
       stock: finalStock,
-      availableNumbers: newAvailableNumbers
+      availableNumbers: newAvailableNumbers,
+      reserves: finalReserves
     };
     
     await setDoc(doc(db, getGiftsCollectionPath(), selectedGift.id), updatedGift);
@@ -1012,7 +1044,7 @@ export default function App() {
                    </div>
                    <button onClick={closeModal} className="p-2 text-slate-400 hover:text-slate-600 bg-slate-200 rounded-full transition-colors"><X size={20} /></button>
                 </div>
-                <div className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-bold mb-6 flex items-center gap-2"><Info size={16} /> 免登記庫存</div>
+                <div className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-bold mb-6 flex items-center gap-2"><Info size={16} />免登記庫存</div>
                 
                 <div 
                   className="rounded-xl overflow-hidden w-full max-w-2xl shadow-md border border-slate-200 mb-6 bg-slate-50 relative group flex items-center justify-center p-4 cursor-pointer"
@@ -1359,7 +1391,7 @@ export default function App() {
                                 </span>
                                 {record.sender && (
                                   <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded font-medium ${getSenderColorClasses(record.sender)}`}>
-                                    <UserSearch size={14} /> {isWithdraw ? '提領人' : '經手/致贈'}: {record.sender}
+                                    <UserSearch size={14} />由 {record.sender} 致贈
                                   </span>
                                 )}
                               </div>
@@ -1432,8 +1464,48 @@ export default function App() {
                   </div>
                 )}
 
+                {selectedGift?.isTracked !== false && (
+                  <div className="bg-amber-50 p-4 rounded-xl border border-amber-100 mt-4">
+                    <label className="block text-sm font-medium text-amber-800 mb-2">各處室備用庫存校正</label>
+                    {editGiftData.reserves && editGiftData.reserves.map((res, idx) => (
+                      <div key={idx} className="flex gap-2 mb-2 items-center">
+                        <input
+                          type="text"
+                          placeholder="長官/處室名稱"
+                          value={res.name}
+                          onChange={(e) => handleReserveChange(idx, 'name', e.target.value)}
+                          className="flex-1 px-3 py-1.5 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none text-sm"
+                        />
+                        <input
+                          type="number"
+                          placeholder="數量"
+                          value={res.qty}
+                          onChange={(e) => handleReserveChange(idx, 'qty', e.target.value)}
+                          className="w-20 px-3 py-1.5 border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none text-sm font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveReserve(idx)}
+                          className="p-1.5 text-amber-500 hover:text-red-500 hover:bg-amber-100 rounded transition-colors"
+                          title="移除此項"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={handleAddReserve}
+                      className="text-xs font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 mt-2"
+                    >
+                      <Plus size={14} /> 新增備用處室
+                    </button>
+                    <p className="text-xs text-amber-600 mt-2 font-medium">若備用數量歸零，請點擊右側 X 移除，或直接將數量設為 0。</p>
+                  </div>
+                )}
+
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">存放位置或說明 (備註)</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1 mt-4">存放位置或說明 (備註)</label>
                   <textarea rows="3" placeholder="例如：存放於秘書室鐵櫃" value={editGiftData.note} onChange={(e) => setEditGiftData({...editGiftData, note: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" />
                 </div>
 

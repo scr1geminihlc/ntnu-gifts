@@ -64,7 +64,6 @@ const handleImageUpload = (e, callback) => {
   }
 };
 
-// 新增：自動辨識長官並回傳對應的 Tailwind 顏色 class
 const getSenderColorClasses = (sender) => {
   if (!sender) return 'text-slate-600 bg-slate-100 border-slate-200';
   if (sender.includes('陳副')) return 'text-blue-700 bg-blue-50 border-blue-200';
@@ -954,7 +953,7 @@ export default function App() {
                     </p>
                   ) : (
                     <p className="text-sm text-blue-600 flex items-center gap-1">
-                      數量有限，送完為止。
+                      常態供應禮品，無需控管
                     </p>
                   )}
                 </div>
@@ -1013,7 +1012,7 @@ export default function App() {
                    </div>
                    <button onClick={closeModal} className="p-2 text-slate-400 hover:text-slate-600 bg-slate-200 rounded-full transition-colors"><X size={20} /></button>
                 </div>
-                <div className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-bold mb-6 flex items-center gap-2"><Info size={16} /> 免登記庫存</div>
+                <div className="bg-blue-100 text-blue-800 px-4 py-1.5 rounded-full text-sm font-bold mb-6 flex items-center gap-2"><Info size={16} /> 常態供應 / 免登記庫存</div>
                 
                 <div 
                   className="rounded-xl overflow-hidden w-full max-w-2xl shadow-md border border-slate-200 mb-6 bg-slate-50 relative group flex items-center justify-center p-4 cursor-pointer"
@@ -1248,13 +1247,14 @@ export default function App() {
                         {formData.recordType !== 'withdraw' && (
                           <div>
                             <label className="block text-sm font-medium text-slate-700 mb-1">對象 / 事項</label>
-                            <input type="text" required placeholder={formData.recordType === 'log' ? '請輸入補登之贈送對象' : '例: 贈送給某某校長'} value={formData.target} onChange={(e) => setFormData({...formData, target: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none" />
+                            {/* 更新：改為 textarea 支援換行 */}
+                            <textarea rows="3" required placeholder={formData.recordType === 'log' ? '請輸入補登之贈送對象' : '例: 贈送給某某校長'} value={formData.target} onChange={(e) => setFormData({...formData, target: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none" />
                           </div>
                         )}
                         
                         <div>
                           <label className="block text-sm font-medium text-slate-700 mb-1">備註 (選填)</label>
-                          <input type="text" value={formData.note} onChange={(e) => setFormData({...formData, note: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none" />
+                          <textarea rows="2" value={formData.note} onChange={(e) => setFormData({...formData, note: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-rose-500 focus:outline-none" />
                         </div>
 
                         <button type="submit" className={`w-full text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center gap-2 mt-2 ${formData.recordType === 'normal' ? 'bg-rose-600 hover:bg-rose-700' : formData.recordType === 'withdraw' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
@@ -1318,7 +1318,8 @@ export default function App() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex justify-between items-start mb-1">
-                                <span className={`font-bold text-lg pr-2 ${isLog ? 'text-indigo-800' : isWithdraw ? 'text-amber-800' : 'text-slate-800'}`} style={{ wordBreak: 'break-word' }}>
+                                {/* 更新：加上 whitespace-pre-wrap 支援自動換行顯示 */}
+                                <span className={`font-bold text-lg pr-2 whitespace-pre-wrap ${isLog ? 'text-indigo-800' : isWithdraw ? 'text-amber-800' : 'text-slate-800'}`} style={{ wordBreak: 'break-word' }}>
                                   {record.target}
                                 </span>
                                 
@@ -1359,14 +1360,14 @@ export default function App() {
                                   <History size={14} />{record.date}
                                 </span>
                                 {record.sender && (
-                                  <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md border font-medium ${getSenderColorClasses(record.sender)}`}>
-                                    <UserSearch size={14} /> {isWithdraw ? '提領人' : '經手/致贈'}: {record.sender}
+                                  <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded font-medium ${getSenderColorClasses(record.sender)}`}>
+                                    <UserSearch size={14} />由 {record.sender} 致贈
                                   </span>
                                 )}
                               </div>
 
                               {record.note && (
-                                <div className="text-sm bg-amber-50 border border-amber-100 text-amber-800 px-3 py-2 rounded-md inline-block max-w-full break-words">
+                                <div className="text-sm bg-amber-50 border border-amber-100 text-amber-800 px-3 py-2 rounded-md inline-block max-w-full whitespace-pre-wrap break-words">
                                   {record.note}
                                 </div>
                               )}
@@ -1662,7 +1663,8 @@ export default function App() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">對象 / 事項</label>
-                  <input type="text" required value={editingRecord.target} onChange={(e) => setEditingRecord({...editingRecord, target: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+                  {/* 更新：改為 textarea 支援換行 */}
+                  <textarea rows="3" required value={editingRecord.target} onChange={(e) => setEditingRecord({...editingRecord, target: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">備註 (選填)</label>

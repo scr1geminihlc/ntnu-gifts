@@ -454,9 +454,6 @@ export default function App() {
     await setDoc(doc(db, getGiftsCollectionPath(), selectedGift.id), updatedGift);
   };
 
-  // ==========================================
-  // 更新：處理編輯歷史紀錄時，針對無編號禮品的數量重新計算
-  // ==========================================
   const handleEditRecordSubmit = async (e) => {
     e.preventDefault();
     if (!editingRecord || !user) return;
@@ -469,7 +466,6 @@ export default function App() {
       const oldChange = parseInt(oldRecord.change, 10) || 0;
       const newChange = parseInt(editingRecord.change, 10) || 0;
       
-      // 1. 先反向扣除舊紀錄的影響
       const oldIsWithdraw = oldRecord.target.includes('【提領備用】');
       const oldIsLog = oldRecord.target.includes('【備用補登】');
       const oldIsNormalOut = oldChange < 0 && !oldIsWithdraw && !oldIsLog;
@@ -488,7 +484,6 @@ export default function App() {
           newReserves[oldSender] += oldAbs;
       }
 
-      // 2. 加上新修改的紀錄影響
       const newIsWithdraw = editingRecord.target.includes('【提領備用】');
       const newIsLog = editingRecord.target.includes('【備用補登】');
       const newIsNormalOut = newChange < 0 && !newIsWithdraw && !newIsLog;
@@ -983,14 +978,15 @@ export default function App() {
         </div>
       )}
 
-      {/* 詳情與編輯 Modal */}
+      {/* 詳情與編輯 Modal (修正手機版滑動體驗) */}
       {isModalOpen && selectedGift && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-          <div className={`bg-white rounded-2xl shadow-xl w-full max-h-[95vh] overflow-hidden flex flex-col md:flex-row relative ${selectedGift.isTracked === false ? 'max-w-3xl' : 'max-w-6xl'}`}>
+          {/* 外層容器：在 md 螢幕以上為 overflow-hidden (左右各自捲動)，在小螢幕則為 overflow-y-auto (整體上下滑動) */}
+          <div className={`bg-white rounded-2xl shadow-xl w-full max-h-[95vh] overflow-y-auto md:overflow-hidden flex flex-col md:flex-row relative ${selectedGift.isTracked === false ? 'max-w-3xl' : 'max-w-6xl'}`}>
             
             {/* ======= 免登記禮品 (圖錄展示模式) ======= */}
             {selectedGift.isTracked === false ? (
-              <div className="w-full p-6 md:p-10 flex flex-col items-center bg-slate-50 overflow-y-auto">
+              <div className="w-full p-6 md:p-10 flex flex-col items-center bg-slate-50 md:overflow-y-auto">
                 <div className="w-full flex justify-between items-center mb-6">
                    <div className="flex items-center gap-3">
                      <h2 className="text-2xl font-bold text-slate-900">{selectedGift.name}</h2>
@@ -1038,8 +1034,8 @@ export default function App() {
             ) : (
               // ======= 一般列管禮品 (管理模式) =======
               <>
-                {/* 左側：禮品資訊與表單 */}
-                <div className="w-full md:w-[45%] p-6 md:p-8 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col bg-slate-50 overflow-y-auto">
+                {/* 左側：禮品資訊與表單 (移除強制 overflow-y-auto 避免手機雙重滾動) */}
+                <div className="w-full md:w-[45%] p-6 md:p-8 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col bg-slate-50 md:overflow-y-auto">
                   <div className="flex justify-between items-start mb-4">
                     <div className="w-full pr-4">
                       <div className="flex items-center gap-2 mb-1">
@@ -1265,8 +1261,8 @@ export default function App() {
                   )}
                 </div>
 
-                {/* 右側：歷史紀錄 */}
-                <div className="w-full md:w-[55%] flex flex-col bg-slate-100 border-l border-slate-200">
+                {/* 右側：歷史紀錄 (移除強制 height 確保手機可往下滑動) */}
+                <div className="w-full md:w-[55%] flex flex-col bg-slate-100 border-l border-slate-200 md:overflow-y-auto">
                   <div className="p-4 md:p-6 border-b border-slate-200 flex justify-between items-center bg-white sticky top-0 z-10 shadow-sm">
                     <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                       <History size={20} className="text-slate-500" /> 歷史紀錄
@@ -1281,7 +1277,7 @@ export default function App() {
                     </div>
                   </div>
                   
-                  <div className="p-4 md:p-6 overflow-y-auto flex-1 h-80 md:h-auto">
+                  <div className="p-4 md:p-6 md:overflow-y-auto flex-1">
                     <div className="space-y-4">
                       {selectedGift.history.length === 0 ? (
                         <div className="text-center text-slate-400 py-10">尚無紀錄</div>
@@ -1616,7 +1612,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 修改歷史紀錄 Modal */}
+      {/* 修改歷史紀錄 Modal (純文字) */}
       {editingRecord && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col">

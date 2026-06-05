@@ -64,6 +64,17 @@ const handleImageUpload = (e, callback) => {
   }
 };
 
+// 新增：自動辨識長官並回傳對應的 Tailwind 顏色 class
+const getSenderColorClasses = (sender) => {
+  if (!sender) return 'text-slate-600 bg-slate-100 border-slate-200';
+  if (sender.includes('陳副')) return 'text-blue-700 bg-blue-50 border-blue-200';
+  if (sender.includes('張副')) return 'text-emerald-700 bg-emerald-50 border-emerald-200';
+  if (sender.includes('楊副')) return 'text-amber-700 bg-amber-50 border-amber-200';
+  if (sender.includes('主秘')) return 'text-purple-700 bg-purple-50 border-purple-200';
+  if (sender.includes('校長')) return 'text-pink-700 bg-pink-50 border-pink-200';
+  return 'text-slate-600 bg-slate-100 border-slate-200';
+};
+
 export default function App() {
   const [role, setRole] = useState('viewer'); 
   const [gifts, setGifts] = useState([]);
@@ -978,10 +989,9 @@ export default function App() {
         </div>
       )}
 
-      {/* 詳情與編輯 Modal (修正手機版滑動體驗) */}
+      {/* 詳情與編輯 Modal */}
       {isModalOpen && selectedGift && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-          {/* 外層容器：在 md 螢幕以上為 overflow-hidden (左右各自捲動)，在小螢幕則為 overflow-y-auto (整體上下滑動) */}
           <div className={`bg-white rounded-2xl shadow-xl w-full max-h-[95vh] overflow-y-auto md:overflow-hidden flex flex-col md:flex-row relative ${selectedGift.isTracked === false ? 'max-w-3xl' : 'max-w-6xl'}`}>
             
             {/* ======= 免登記禮品 (圖錄展示模式) ======= */}
@@ -1034,7 +1044,7 @@ export default function App() {
             ) : (
               // ======= 一般列管禮品 (管理模式) =======
               <>
-                {/* 左側：禮品資訊與表單 (移除強制 overflow-y-auto 避免手機雙重滾動) */}
+                {/* 左側：禮品資訊與表單 */}
                 <div className="w-full md:w-[45%] p-6 md:p-8 border-b md:border-b-0 md:border-r border-slate-200 flex flex-col bg-slate-50 md:overflow-y-auto">
                   <div className="flex justify-between items-start mb-4">
                     <div className="w-full pr-4">
@@ -1261,7 +1271,7 @@ export default function App() {
                   )}
                 </div>
 
-                {/* 右側：歷史紀錄 (移除強制 height 確保手機可往下滑動) */}
+                {/* 右側：歷史紀錄 */}
                 <div className="w-full md:w-[55%] flex flex-col bg-slate-100 border-l border-slate-200 md:overflow-y-auto">
                   <div className="p-4 md:p-6 border-b border-slate-200 flex justify-between items-center bg-white sticky top-0 z-10 shadow-sm">
                     <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -1349,7 +1359,7 @@ export default function App() {
                                   <History size={14} />{record.date}
                                 </span>
                                 {record.sender && (
-                                  <span className="flex items-center gap-1 text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                                  <span className={`flex items-center gap-1 px-2 py-0.5 rounded-md border font-medium ${getSenderColorClasses(record.sender)}`}>
                                     <UserSearch size={14} /> {isWithdraw ? '提領人' : '經手/致贈'}: {record.sender}
                                   </span>
                                 )}
@@ -1593,7 +1603,7 @@ export default function App() {
                           <span className="font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">{record.giftName}</span>
                           <span className="text-slate-300">|</span> 
                           <span className="flex items-center gap-1"><History size={14} />{record.date}</span>
-                          {record.sender && (<><span className="text-slate-300">|</span><span className="flex items-center gap-1 text-slate-500"><UserSearch size={14} />由 {record.sender} 致贈</span></>)}
+                          {record.sender && (<><span className="text-slate-300">|</span><span className={`flex items-center gap-1 px-1.5 py-0.5 rounded font-medium ${getSenderColorClasses(record.sender)}`}><UserSearch size={14} />由 {record.sender} 致贈</span></>)}
                         </div>
                         
                         {record.note && (
